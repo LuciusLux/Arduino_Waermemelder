@@ -1,2 +1,135 @@
-Test 
-Test ok
+// Display
+#include <Wire.h> // Wire Bibliothek einbinden
+#include <LiquidCrystal_I2C.h> // Vorher hinzugefügte LiquidCrystal_I2C Bibliothek einbinden
+LiquidCrystal_I2C lcd(0x27, 16, 2); //Hier wird festgelegt um welches Display es sich handelt. Die HEX-Adresse 0x27 ist eine Standartadresse für LCD mit einem einfachen I²C-Modul auf der Rückseite.
+int messwert = 0;
+// Taster
+int taster = 7; //Das Wort „taster“ steht jetzt für den Wert 7.
+int tasterstatus = 0; //Das Wort „tasterstatus“ steht jetzt zunächst für den Wert 0. Später wird unter dieser Variable gespeichert, ob der Taster gedrückt ist oder nicht.
+//Temperatur
+int TMP36 = A0; //Der Sensor soll am analogen Pin A0 angeschlossen werden. Wir nennen den Pin ab jetzt "TMP36"
+int sensorwert;
+int temperatur = 0; //Unter der Variablen "temperatur" wird später der Temperaturwert abgespeichert.
+int t = 500; //Der Wert für „t“ gibt im Code die zeitlichen Abstände zwischen den einzelnen Messungen vor.
+//RGB LED Version B
+int LEDblau = 3; // Farbe blau an Pin 3
+int LEDrot = 5; // Farbe rot an Pin 5
+int LEDgruen = 6; // Farbe grün an Pin 6
+int p = 1000; // p ist eine Pause mit 1000ms also 1 Sekunde
+int brightness1a = 150; // Zahlenwert zwischen 0 und 255 – gibt die Leuchtstärke der einzelnen Farbe an
+int brightness1b = 150; // Zahlenwert zwischen 0 und 255 – gibt die Leuchtstärke der einzelnen Farbe an
+int brightness1c = 150; // Zahlenwert zwischen 0 und 255 – gibt die Leuchtstärke der einzelnen Farbe an
+int dunkel = 255; // Zahlenwert 255 - LED aus.
+//Piepser alias Tone
+int TONE = 4;
+unsigned int coldTone = 500; // Die Frequenz des Tons in Hertz
+unsigned int hotTone = 2600; // Die Frequenz des Tons in Hertz
+unsigned long lengthToneCold = 500; // Die Dauer des Tons in Millisekunden
+unsigned long lengthToneHot = 300; // Die Dauer des Tons in Millisekunden
+//Zusatz für Loop, dass die Applikation nach Wunsch funktioniert.
+bool temperaturmessung = false;
+bool previousStartStop = LOW;
+bool readingStartStop;
+unsigned long timeStartStop;
+int debounce = 50;
+bool lastButtonState = false;
+bool displayStart = false;
+unsigned long lcdIntervalTime;
+int lcdInterval = 500;
+
+
+void setup() {
+  // put your setup code here, to run once:
+  lcd.init(); //Im Setup wird der LCD gestartet
+  lcd.backlight(); //Hintergrundbeleuchtung einschalten.
+  pinMode(taster, INPUT); //Der Pin mit dem Taster (Pin 7) ist jetzt ein Eingang.
+  Serial.begin(9600); //Im Setup beginnt die serielle Kommunikation, damit die Temperatur an den serial monitor übertragen wird. Über die serielle Kommunikation sendet das Board die Messwerte an den Computer.
+  pinMode(LEDblau, OUTPUT);
+  pinMode(LEDrot, OUTPUT);
+  pinMode(LEDgruen, OUTPUT);
+  lcdIntervalTime = millis();
+  analogWrite(LEDblau, dunkel);
+  analogWrite(LEDrot, dunkel);
+  analogWrite(LEDgruen, dunkel);
+  pinMode(TONE, OUTPUT);
+}
+
+void loop() {
+  if (displayStart == false) {
+    displayStart = true;
+    lcd.setCursor(0, 0); //Hier wird die Position des ersten Zeichens festgelegt. In diesem Fall bedeutet (0,0) das erste Zeichen in der ersten Zeile.
+    lcd.print("Waermestatus: ");
+  TastendruckOk();
+  }
+  if (millis() - lcdIntervalTime > lcdInterval) {
+    temperaturmessungStart();
+    lcdIntervalTime = millis();
+  }
+}
+
+void TastendruckOk() {
+  readingStartStop = digitalRead(taster);
+  // If the switch changed, due to noise or pressing:
+  if (readingStartStop != lastButtonState) {
+    // reset the debouncing timer
+    timeStartStop = millis();
+    lastButtonState = readingStartStop;
+  }
+  if (readingStartStop == HIGH && previousStartStop == LOW && millis() - timeStartStop > debounce) {
+    if (temperaturmessung == true) {
+      temperaturmessung = false;
+    }
+    else {
+      temperaturmessung = true;
+    }
+    previousStartStop = readingStartStop;
+  }
+  else if (readingStartStop == LOW && previousStartStop == HIGH && millis() - timeStartStop > debounce) {
+    previousStartStop = readingStartStop;
+  }
+}
+
+void temperaturmessungStart() {
+  if (temperaturmessung == true) {
+    //Messung starten
+    sensorwert = analogRead(TMP36);
+    temperatur = map(sensorwert, 0, 410, -50, 150);
+    Serial.print(temperatur);
+    Serial.println(" Grad Celsius");
+    if (temperatur >= 25)
+    {
+      tone(TONE, hotTone, lengthToneHot);
+      analogWrite(LEDrot, brightness1b);
+      analogWrite(LEDblau, dunkel);
+      analogWrite(LEDgruen, dunkel);
+      lcd.setCursor(0, 1); // In diesem Fall bedeutet (0,1) das erste Zeichen in der zweiten Zeile.
+      lcd.print("Heiss    ");
+    }
+    else if (temperatur <= 10)
+    {
+      tone(TONE, coldTone, lengthToneCold);
+      analogWrite(LEDblau, brightness1a);
+      analogWrite(LEDrot, dunkel);
+      analogWrite(LEDgruen, dunkel);
+      lcd.setCursor(0, 1); // In diesem Fall bedeutet (0,1) das erste Zeichen in der zweiten Zeile.
+      lcd.print("Kalt     ");
+    }
+    else
+    {
+      noTone(TONE);
+      analogWrite(LEDgruen, brightness1c);
+      analogWrite(LEDblau, dunkel);
+      analogWrite(LEDrot, dunkel);
+      lcd.setCursor(0, 1); // In diesem Fall bedeutet (0,1) das erste Zeichen in der zweiten Zeile.
+      lcd.print("Normal   ");
+    }
+  }
+  else {
+    noTone(TONE);
+    analogWrite(LEDblau, dunkel);
+    analogWrite(LEDrot, dunkel);
+    analogWrite(LEDgruen, dunkel);
+    lcd.setCursor(0, 1); // In diesem Fall bedeutet (0,1) das erste Zeichen in der zweiten Zeile.
+    lcd.print("Unbekannt");
+  }
+}
